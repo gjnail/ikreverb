@@ -1,15 +1,14 @@
 #!/bin/bash
 
-# Remove existing installations
+# Remove old plugins
 rm -rf ~/Library/Audio/Plug-Ins/VST3/IKReverb.vst3
 rm -rf ~/Library/Audio/Plug-Ins/Components/IKReverb.component
 
-# Create directories if they don't exist
-mkdir -p ~/Library/Audio/Plug-Ins/VST3
-mkdir -p ~/Library/Audio/Plug-Ins/Components
+# Clear Ableton's plugin cache
+rm -rf ~/Library/Preferences/Ableton/Live*/Plugin*
 
-# Copy new builds
+# Copy new plugins
 cp -r Builds/MacOSX/build/Debug/IKReverb.vst3 ~/Library/Audio/Plug-Ins/VST3/
 cp -r Builds/MacOSX/build/Debug/IKReverb.component ~/Library/Audio/Plug-Ins/Components/
 
-echo "Installation complete!" 
+echo "✨ Installation complete! Please restart Ableton Live and rescan plugins." 

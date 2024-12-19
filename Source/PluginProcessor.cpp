@@ -10,75 +10,76 @@
 #include "PluginEditor.h"
 #include <cmath>
 
-juce::AudioProcessorValueTreeState::ParameterLayout IKDistortionAudioProcessor::createParameterLayout()
+juce::AudioProcessorValueTreeState::ParameterLayout IKReverbAudioProcessor::createParameterLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    layout.add(std::make_unique<juce::AudioParameterBool>(
-        "ghostMode", 
-        "Ghost Mode", 
-        false));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        "size",
+        "Size",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
+        0.5f));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "drive",
-        "Drive",
-        juce::NormalisableRange<float>(1.0f, 25.0f, 0.1f),
-        1.0f));
-
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "output",
-        "Output",
+        "damping",
+        "Damping",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
         0.5f));
 
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         "type",
         "Type",
-        juce::StringArray {"Soft", "Hard", "Tube", "Foldback", "Sine"},
+        juce::StringArray {"ROOM", "HALL", "PLATE", "SPRING", "SHIMMER"},
         0));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "tone",
-        "Tone",
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
-        0.5f));
+        "predelay",
+        "Pre-Delay",
+        juce::NormalisableRange<float>(0.0f, 500.0f, 1.0f),
+        0.0f));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         "mix",
         "Mix",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
-        1.0f));
+        0.3f));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "destroy",
-        "Destroy",
-        juce::NormalisableRange<float>(0.0f, 100.0f, 1.0f),
+        "modulation",
+        "Modulation",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
         0.0f));
 
     return layout;
 }
 
 //==============================================================================
-IKDistortionAudioProcessor::IKDistortionAudioProcessor()
+IKReverbAudioProcessor::IKReverbAudioProcessor()
     : AudioProcessor (BusesProperties()
                      .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                      .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts(*this, nullptr, "Parameters", createParameterLayout())
 {
-    bandpassFilter.setType(juce::dsp::StateVariableTPTFilterType::bandpass);
+    reverbParams.roomSize = 0.5f;
+    reverbParams.damping = 0.5f;
+    reverbParams.wetLevel = 0.33f;
+    reverbParams.dryLevel = 0.67f;
+    reverbParams.width = 1.0f;
+    reverbParams.freezeMode = 0.0f;
+    reverb.setParameters(reverbParams);
 }
 
-IKDistortionAudioProcessor::~IKDistortionAudioProcessor()
+IKReverbAudioProcessor::~IKReverbAudioProcessor()
 {
 }
 
 //==============================================================================
-const juce::String IKDistortionAudioProcessor::getName() const
+const juce::String IKReverbAudioProcessor::getName() const
 {
     return JucePlugin_Name;
 }
 
-bool IKDistortionAudioProcessor::acceptsMidi() const
+bool IKReverbAudioProcessor::acceptsMidi() const
 {
    #if JucePlugin_WantsMidiInput
     return true;
@@ -87,7 +88,7 @@ bool IKDistortionAudioProcessor::acceptsMidi() const
    #endif
 }
 
-bool IKDistortionAudioProcessor::producesMidi() const
+bool IKReverbAudioProcessor::producesMidi() const
 {
    #if JucePlugin_ProducesMidiOutput
     return true;
@@ -96,7 +97,7 @@ bool IKDistortionAudioProcessor::producesMidi() const
    #endif
 }
 
-bool IKDistortionAudioProcessor::isMidiEffect() const
+bool IKReverbAudioProcessor::isMidiEffect() const
 {
    #if JucePlugin_IsMidiEffect
     return true;
@@ -105,37 +106,37 @@ bool IKDistortionAudioProcessor::isMidiEffect() const
    #endif
 }
 
-double IKDistortionAudioProcessor::getTailLengthSeconds() const
+double IKReverbAudioProcessor::getTailLengthSeconds() const
 {
     return 0.0;
 }
 
-int IKDistortionAudioProcessor::getNumPrograms()
+int IKReverbAudioProcessor::getNumPrograms()
 {
     return 1;   // NB: some hosts don't cope very well if you tell them there are 0 programs,
                 // so this should be at least 1, even if you're not really implementing programs.
 }
 
-int IKDistortionAudioProcessor::getCurrentProgram()
+int IKReverbAudioProcessor::getCurrentProgram()
 {
     return 0;
 }
 
-void IKDistortionAudioProcessor::setCurrentProgram (int index)
+void IKReverbAudioProcessor::setCurrentProgram (int index)
 {
 }
 
-const juce::String IKDistortionAudioProcessor::getProgramName (int index)
+const juce::String IKReverbAudioProcessor::getProgramName (int index)
 {
     return {};
 }
 
-void IKDistortionAudioProcessor::changeProgramName (int index, const juce::String& newName)
+void IKReverbAudioProcessor::changeProgramName (int index, const juce::String& newName)
 {
 }
 
 //==============================================================================
-void IKDistortionAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+void IKReverbAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     currentSampleRate = sampleRate;
     juce::dsp::ProcessSpec spec;
@@ -143,19 +144,28 @@ void IKDistortionAudioProcessor::prepareToPlay (double sampleRate, int samplesPe
     spec.maximumBlockSize = samplesPerBlock;
     spec.numChannels = getTotalNumOutputChannels();
     
-    bandpassFilter.prepare(spec);
-    bandpassFilter.setResonance(ghostBandpassQ);
-    bandpassFilter.setCutoffFrequency(ghostBandpassFreq);
+    reverb.prepare(spec);
+    preDelay.prepare(spec);
+    preDelay.setDelay(0);
+    
+    // Initialize reverb parameters
+    reverbParams.roomSize = 0.5f;
+    reverbParams.damping = 0.5f;
+    reverbParams.wetLevel = 0.33f;
+    reverbParams.dryLevel = 0.67f;
+    reverbParams.width = 1.0f;
+    reverbParams.freezeMode = 0.0f;
+    reverb.setParameters(reverbParams);
 }
 
-void IKDistortionAudioProcessor::releaseResources()
+void IKReverbAudioProcessor::releaseResources()
 {
     // When playback stops, you can use this as an opportunity to free up any
     // spare memory, etc.
 }
 
 #ifndef JucePlugin_PreferredChannelConfigurations
-bool IKDistortionAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+bool IKReverbAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
   #if JucePlugin_IsMidiEffect
     juce::ignoreUnused (layouts);
@@ -180,238 +190,170 @@ bool IKDistortionAudioProcessor::isBusesLayoutSupported (const BusesLayout& layo
 }
 #endif
 
-float IKDistortionAudioProcessor::processDistortion(float input, DistortionType type)
-{
-    switch (type)
-    {
-        case DistortionType::Soft:
-            return std::tanh(input);
-            
-        case DistortionType::Hard:
-            return input > 1.0f ? 1.0f : (input < -1.0f ? -1.0f : input);
-            
-        case DistortionType::Tube:
-        {
-            // Asymmetric tube-style distortion
-            float x = input;
-            if (x > 0)
-                return 1.0f - std::exp(-x);
-            else
-                return -1.0f + std::exp(x);
-        }
-            
-        case DistortionType::Foldback:
-        {
-            // Foldback distortion
-            float threshold = 0.5f;
-            float x = input;
-            while (std::abs(x) > threshold) {
-                x = std::abs(x > 0 ? threshold - (x - threshold) 
-                                  : -(threshold - (-x - threshold)));
-            }
-            return x;
-        }
-            
-        case DistortionType::Sine:
-            // Sine waveshaping
-            return std::sin(input * juce::MathConstants<float>::pi * 0.5f);
-            
-        default:
-            return input;
-    }
-}
-
-float IKDistortionAudioProcessor::processDestroy(float input, float amount)
-{
-    if (amount <= 0.0f) return input;
-    
-    // Super aggressive input gain
-    float inputGain = 1.0f + (amount * 12.0f); // Even higher input gain
-    float boostedInput = input * inputGain;
-    
-    // Keep original low end with massive emphasis
-    float lowEnd = std::tanh(boostedInput * 0.8f) * (1.0f + amount * 2.5f);
-    
-    // Fixed resonant peak frequency for maximum impact
-    float frequency = 150.0f + (amount * amount) * 200.0f;  // Nonlinear frequency scaling
-    float q = 15.0f + amount * 35.0f; // Fixed high resonance that increases with amount
-    
-    // Calculate filter coefficients
-    float omega = 2.0f * juce::MathConstants<float>::pi * frequency / (float)currentSampleRate;
-    float alpha = std::sin(omega) / (2.0f * q);
-    
-    float b0 = alpha;
-    float b1 = 0.0f;
-    float b2 = -alpha;
-    float a0 = 1.0f + alpha;
-    float a1 = -2.0f * std::cos(omega);
-    float a2 = 1.0f - alpha;
-    
-    // Normalize coefficients
-    b0 /= a0;
-    b1 /= a0;
-    b2 /= a0;
-    a1 /= a0;
-    a2 /= a0;
-    
-    // Apply the resonant filter
-    float resonant = b0 * boostedInput + b1 * destroyFilterL[0] + b2 * destroyFilterL[1]
-                              - a1 * destroyFilterL[2] - a2 * destroyFilterL[3];
-    
-    // Update filter state
-    destroyFilterL[1] = destroyFilterL[0];
-    destroyFilterL[0] = boostedInput;
-    destroyFilterL[3] = destroyFilterL[2];
-    destroyFilterL[2] = resonant;
-    
-    // Extreme multi-stage distortion
-    float resonantGain = 1.0f + amount * 15.0f; // Much more gain
-    resonant *= resonantGain;
-    
-    // First stage - hard clip with pre-emphasis
-    resonant *= 1.0f + (amount * 2.0f);
-    resonant = std::tanh(resonant * 2.5f);
-    
-    // Second stage - aggressive waveshaping
-    resonant = std::sin(resonant * juce::MathConstants<float>::pi * 0.5f);
-    
-    // Third stage - fold back distortion
-    float threshold = 0.6f;
-    while (std::abs(resonant) > threshold) {
-        resonant = threshold - (std::abs(resonant) - threshold);
-    }
-    
-    // Mix signals with phase alignment
-    float lowEndMix = 0.6f + (amount * 0.4f); // 60-100% low end
-    float resonantMix = amount * 1.5f; // More aggressive resonance mix
-    
-    float output = (lowEnd * lowEndMix) + (resonant * resonantMix);
-    
-    // Final saturation stages
-    output *= 1.0f + amount * 3.0f; // More output gain
-    output = std::tanh(output * 2.0f); // First clip
-    output *= 1.0f + amount * 1.0f; // Additional gain
-    output = std::tanh(output); // Final clip
-    
-    return output;
-}
-
-void IKDistortionAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
-                                              juce::MidiBuffer& midiMessages)
+void IKReverbAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
+                                               juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear (i, 0, buffer.getNumSamples());
-
-    // Get all parameters
-    auto* ghostModeParam = apvts.getRawParameterValue("ghostMode");
-    auto* driveParam = apvts.getRawParameterValue("drive");
-    auto* outputParam = apvts.getRawParameterValue("output");
-    auto* typeParam = apvts.getRawParameterValue("type");
-    auto* toneParam = apvts.getRawParameterValue("tone");
+    // Update reverb parameters
+    auto* sizeParam = apvts.getRawParameterValue("size");
+    auto* dampingParam = apvts.getRawParameterValue("damping");
     auto* mixParam = apvts.getRawParameterValue("mix");
-    auto* destroyParam = apvts.getRawParameterValue("destroy");
-    
-    ghostModeEnabled = ghostModeParam->load() > 0.5f;
-    float drive = driveParam->load();
-    float output = outputParam->load();
-    float tone = toneParam->load();
-    float mix = mixParam->load();
-    float destroyAmount = destroyParam->load() / 100.0f;
-    auto type = static_cast<DistortionType>(static_cast<int>(typeParam->load()));
-    
-    // Tone control coefficients (simple low-pass filter)
-    const float alpha = tone * 0.99f;
-    const float beta = 1.0f - alpha;
+    auto* typeParam = apvts.getRawParameterValue("type");
+    auto* predelayParam = apvts.getRawParameterValue("predelay");
+    auto* modulationParam = apvts.getRawParameterValue("modulation");
 
-    if (ghostModeEnabled)
+    // Update reverb parameters based on type
+    float baseSize = sizeParam->load();
+    float baseDamping = dampingParam->load();
+    float modulation = modulationParam->load();
+    
+    switch (static_cast<int>(typeParam->load()))
     {
-        // Update ghost mode filter parameters
-        float modFreq = 1000.0f + std::sin(currentSampleRate * 0.00001f) * 500.0f; // Subtle frequency modulation
-        bandpassFilter.setCutoffFrequency(modFreq);
-        bandpassFilter.setResonance(5.0f); // High resonance for that ghostly sound
-        
-        // Apply bandpass filter and additional processing in ghost mode
+        case 0: // Room
+            reverbParams.roomSize = baseSize * 0.4f;
+            reverbParams.damping = baseDamping * 0.9f;
+            reverbParams.width = 0.5f;
+            break;
+            
+        case 1: // Hall
+            reverbParams.roomSize = baseSize * 1.0f;
+            reverbParams.damping = baseDamping * 0.2f;
+            reverbParams.width = 1.0f;
+            break;
+            
+        case 2: // Plate
+            reverbParams.roomSize = baseSize * 0.6f;
+            reverbParams.damping = baseDamping * 0.1f;
+            reverbParams.width = 0.75f;
+            break;
+            
+        case 3: // Spring
+            reverbParams.roomSize = baseSize * 0.3f;
+            reverbParams.damping = baseDamping * 0.4f;
+            reverbParams.width = 0.3f;
+            break;
+            
+        case 4: // Shimmer
+            reverbParams.roomSize = baseSize * 0.8f;
+            reverbParams.damping = baseDamping * 0.3f;
+            reverbParams.width = 1.0f;
+            break;
+    }
+    
+    reverbParams.wetLevel = mixParam->load();
+    reverbParams.dryLevel = 1.0f - mixParam->load();
+    reverbParams.freezeMode = 0.0f;
+    reverb.setParameters(reverbParams);
+
+    // Pre-delay time in samples
+    int predelayTimeSamples = static_cast<int>((predelayParam->load() / 1000.0f) * currentSampleRate);
+    preDelay.setDelay(predelayTimeSamples);
+    
+    // Create temporary buffers for processing
+    juce::AudioBuffer<float> wetBuffer(totalNumInputChannels, buffer.getNumSamples());
+    wetBuffer.clear();
+
+    // Copy input to wet buffer
+    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    {
+        wetBuffer.copyFrom(channel, 0, buffer, channel, 0, buffer.getNumSamples());
+    }
+
+    // Apply pre-delay if needed
+    if (predelayTimeSamples > 0)
+    {
         for (int channel = 0; channel < totalNumInputChannels; ++channel)
         {
-            auto* channelData = buffer.getWritePointer(channel);
+            auto* channelData = wetBuffer.getWritePointer(channel);
             for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
             {
-                float input = channelData[sample];
-                
-                // Apply bandpass filter
-                float filtered = bandpassFilter.processSample(channel, input);
-                
-                // Add some ghostly distortion
-                filtered = std::tanh(filtered * 2.0f);
-                
-                // Mix with original
-                channelData[sample] = filtered * 0.8f + input * 0.2f;
+                channelData[sample] = preDelay.popSample(channel, channelData[sample]);
             }
         }
     }
 
-    // Process each channel
+    // Process reverb
+    juce::dsp::AudioBlock<float> block(wetBuffer);
+    juce::dsp::ProcessContextReplacing<float> context(block);
+    reverb.process(context);
+
+    // Apply modulation
+    if (modulation > 0.0f)
+    {
+        float modDepth = modulation * 0.002f; // Subtle modulation
+        float modSpeed = 3.0f; // 3 Hz modulation rate
+
+        for (int channel = 0; channel < totalNumInputChannels; ++channel)
+        {
+            auto* channelData = wetBuffer.getWritePointer(channel);
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            {
+                float modPhase = std::sin(2.0f * juce::MathConstants<float>::pi * shimmerPhase);
+                channelData[sample] *= (1.0f + modPhase * modDepth);
+                shimmerPhase += modSpeed / currentSampleRate;
+                if (shimmerPhase >= 1.0f)
+                    shimmerPhase -= 1.0f;
+            }
+        }
+    }
+
+    // Mix dry and wet signals
+    float wetMix = mixParam->load();
+    float dryMix = 1.0f - wetMix;
+
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
-        auto* channelData = buffer.getWritePointer(channel);
-        float& lastSample = (channel == 0) ? lastSampleL : lastSampleR;
-        
+        auto* dryData = buffer.getWritePointer(channel);
+        auto* wetData = wetBuffer.getWritePointer(channel);
+
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
-            const float cleanSample = channelData[sample];
-            float input = cleanSample * drive;
-            
-            // Apply distortion
-            float processed = processDistortion(input, type);
-            
-            // Apply tone control (low-pass filter)
-            processed = processed * beta + lastSample * alpha;
-            lastSample = processed;
-            
-            // Apply destroy effect
-            processed = processDestroy(processed, destroyAmount);
-            
-            // Mix dry/wet
-            processed = cleanSample * (1.0f - mix) + processed * mix;
-            
-            // Apply output level
-            channelData[sample] = processed * output;
+            dryData[sample] = dryData[sample] * dryMix + wetData[sample] * wetMix;
         }
     }
 }
 
-//==============================================================================
-bool IKDistortionAudioProcessor::hasEditor() const
+float IKReverbAudioProcessor::processShimmer(float input, float amount)
 {
-    return true; // (change this to false if you choose to not supply an editor)
-}
-
-juce::AudioProcessorEditor* IKDistortionAudioProcessor::createEditor()
-{
-    return new IKDistortionAudioProcessorEditor (*this);
-}
-
-//==============================================================================
-void IKDistortionAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
-{
-    // You should use this method to store your parameters in the memory block.
-    // You could do that either as raw data, or use the XML or ValueTree classes
-    // as intermediaries to make it easy to save and load complex data.
-}
-
-void IKDistortionAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
-{
-    // You should use this method to restore your parameters from this memory block,
-    // whose contents will have been created by the getStateInformation() call.
+    // Simple ring modulation for shimmer effect
+    shimmerPhase += 440.0f / currentSampleRate; // 440 Hz modulation
+    if (shimmerPhase >= 1.0f)
+        shimmerPhase -= 1.0f;
+    
+    return input * std::sin(2.0f * juce::MathConstants<float>::pi * shimmerPhase) * amount;
 }
 
 //==============================================================================
-// This creates new instances of the plugin..
+bool IKReverbAudioProcessor::hasEditor() const
+{
+    return true;
+}
+
+juce::AudioProcessorEditor* IKReverbAudioProcessor::createEditor()
+{
+    return new IKReverbAudioProcessorEditor (*this);
+}
+
+//==============================================================================
+void IKReverbAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+{
+    auto state = apvts.copyState();
+    std::unique_ptr<juce::XmlElement> xml(state.createXml());
+    copyXmlToBinary(*xml, destData);
+}
+
+void IKReverbAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+{
+    std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
+    if (xmlState.get() != nullptr)
+        if (xmlState->hasTagName(apvts.state.getType()))
+            apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+}
+
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new IKDistortionAudioProcessor();
+    return new IKReverbAudioProcessor();
 }

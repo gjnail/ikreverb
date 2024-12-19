@@ -1,33 +1,44 @@
-# Internet Kids Distortion
+# Internet Kids Reverb
 
-A simple but effective distortion audio plugin built with JUCE. This plugin provides warm, musical distortion with intuitive controls.
+A professional-grade reverb plugin with ethereal sound shaping capabilities. From intimate rooms to infinite spaces, this plugin offers a wide range of reverb types and creative sound design possibilities.
 
 ## Features
 
-- Drive control: Adjusts the amount of distortion (1.0 to 25.0)
-- Output level: Controls the final output volume (0.0 to 1.0)
-- Soft clipping algorithm using tanh for warm, musical distortion
-- Clean, simple user interface
-- Supports all major plugin formats (VST3, AU, AAX)
-- Works in both mono and stereo
+- Multiple reverb algorithms (Room, Hall, Plate, Spring)
+- Unique "Shimmer" mode for ethereal pitch-shifted reverb
+- Pre-delay control for spatial depth
+- High-quality modulation for added movement
+- Beautiful, modern user interface
+- VST3 and AU formats supported
+- Compatible with all major DAWs
 
-## Building
+## Installation
 
-This project requires:
-- JUCE 7.0.0 or higher
-- A C++ compiler supporting C++17
-- CMake (optional, if building with CMake)
+### macOS
+1. Download the latest release
+2. Run the installer package
+3. Launch your DAW and the plugin will be available
 
-To build:
+### Windows
+1. Download the latest release
+2. Run the installer
+3. Follow the installation wizard
+4. Launch your DAW and the plugin will be available
 
-1. Clone this repository
-2. Open the `.jucer` file in Projucer
-3. Select your target IDE and hit "Save and Open in IDE"
-4. Build the project in your IDE
+## Development
+
+See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for build instructions and development guidelines.
+
+## Documentation
+
+- [User Guide](docs/USER_GUIDE.md)
+- [Development Guide](docs/DEVELOPMENT.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [DSP Algorithms](docs/DSP_ALGORITHMS.md)
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+Copyright © 2024 Internet Kids. All rights reserved.
 
 ## Author
 

@@ -1,154 +1,69 @@
-# IK Distortion Development Guide
+# IK Reverb Development Guide
 
-## Development Environment Setup
+This guide covers the development setup and workflow for the IK Reverb plugin.
 
-### Prerequisites
-- JUCE Framework
-- C++ Development Environment
-- CMake (optional)
-- Xcode (macOS) or Visual Studio (Windows)
+## Development Setup
 
-### Building the Project
-1. Open `IKDistortion.jucer` in Projucer
-2. Generate project files for your IDE
-3. Build the project in Debug or Release configuration
+1. Install JUCE (7.0.0 or higher)
+2. Open `IKReverb.jucer` in Projucer
+3. Configure your development environment:
+   - Set C++ Language Standard to C++17
+   - Enable JUCE_DSP module
+   - Configure VST3/AU paths as needed
 
 ## Project Structure
 
 ```
-IKDistortion/
-├── Source/
-│   ├── PluginProcessor.cpp
-│   ├── PluginProcessor.h
-│   ├── PluginEditor.cpp
-│   └── PluginEditor.h
-├── JuceLibraryCode/
-├── Builds/
-├── Installer/
-└── docs/
+IKReverb/
+├── Source/                 # Plugin source code
+├── Builds/                # Build files for different platforms
+├── JuceLibraryCode/       # JUCE library code
+├── scripts/               # Build and deployment scripts
+└── docs/                  # Documentation
 ```
 
-## Code Organization
+## Building
 
-### Audio Processing (`PluginProcessor`)
-- Parameter management
-- DSP algorithms
-- Audio buffer processing
-- State management
+### macOS
+1. Open Projucer
+2. Load `IKReverb.jucer`
+3. Click "Save and Open in Xcode"
+4. Build in Xcode
 
-### User Interface (`PluginEditor`)
-- Control layout
-- Parameter binding
-- Real-time visualization
-- User interaction handling
+### Windows
+1. Open Projucer
+2. Load `IKReverb.jucer`
+3. Click "Save and Open in Visual Studio"
+4. Build in Visual Studio
 
-## Adding New Features
+## Adding Features
 
-### New Distortion Algorithm
-1. Add enum value to `DistortionType`
-2. Implement processing in `processDistortion()`
-3. Update parameter layout in `createParameterLayout()`
-4. Add UI elements in `PluginEditor`
+### New Reverb Algorithm
+1. Add enum value to `ReverbType`
+2. Implement processing in `processReverb()`
+3. Update parameter handling in `processBlock()`
+4. Add UI controls in `PluginEditor`
 
-### New Parameters
-1. Add to `createParameterLayout()`
-2. Create UI components in `PluginEditor`
-3. Implement processing logic in `processBlock()`
+### UI Customization
+1. Modify `IKReverbLookAndFeel` for custom styling
+2. Update layout in `PluginEditor::resized()`
+3. Add new controls in `PluginEditor`
 
-## Testing Guidelines
+## Testing
 
-### Audio Processing Tests
-- Test with various sample rates
-- Verify parameter smoothing
-- Check CPU usage
-- Test extreme parameter values
+1. Build both Debug and Release configurations
+2. Test in multiple DAWs
+3. Verify CPU usage is reasonable
+4. Check for audio glitches
+5. Validate parameter automation
 
-### UI Testing
-- Verify parameter binding
-- Test automation
-- Check resource usage
-- Verify state saving/loading
+## Release Process
 
-## Performance Optimization
-
-### DSP Optimization
-- Minimize allocations in audio thread
-- Use SIMD where applicable
-- Implement efficient parameter smoothing
-- Profile critical paths
-
-### UI Optimization
-- Minimize repaints
-- Use efficient graphics operations
-- Handle resize events properly
-- Cache complex calculations
-
-## Building for Distribution
-
-### Plugin Formats
-- VST3
-- AU (macOS)
-- Standalone
-
-### Release Checklist
-1. Update version numbers
-2. Run full test suite
-3. Build all formats
-4. Create installers
-5. Update documentation
-
-## Contributing Guidelines
-
-### Code Style
-- Follow existing formatting
-- Use meaningful variable names
-- Document complex algorithms
-- Add comments for clarity
-
-### Pull Request Process
-1. Create feature branch
-2. Update documentation
-3. Add tests
-4. Submit PR with description
-
-## Debugging Tips
-
-### Audio Issues
-- Use debugger breakpoints
-- Add logging statements
-- Monitor CPU usage
-- Check buffer sizes
-
-### UI Issues
-- Use JUCE debug overlays
-- Monitor paint operations
-- Check component bounds
-- Verify parameter connections
-
-## Version Control
-
-### Branching Strategy
-- main: stable releases
-- develop: integration branch
-- feature/*: new features
-- bugfix/*: bug fixes
-
-### Commit Guidelines
-- Clear commit messages
-- Single responsibility
-- Reference issues
-- Include tests
-
-## Documentation
-
-### Code Documentation
-- Document public APIs
-- Explain complex algorithms
-- Update README.md
-- Maintain CHANGELOG.md
-
-### User Documentation
-- Update user guide
-- Document new features
-- Include usage examples
-- Add troubleshooting tips 
+1. Update version number in:
+   - `IKReverb.jucer`
+   - Installer scripts
+2. Build for all platforms
+3. Create installers
+4. Test installation process
+5. Create release notes
+6. Tag release in git

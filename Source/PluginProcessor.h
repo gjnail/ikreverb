@@ -13,24 +13,23 @@
 //==============================================================================
 /**
 */
-class IKDistortionAudioProcessor  : public juce::AudioProcessor
+class IKReverbAudioProcessor  : public juce::AudioProcessor
 {
 public:
-    enum class DistortionType
+    enum class ReverbType
     {
-        Soft,       // Soft clipping (tanh)
-        Hard,       // Hard clipping
-        Tube,       // Tube-style saturation
-        Foldback,   // Foldback distortion
-        Sine,       // Sine waveshaping
+        Room,       // Small room reverb
+        Hall,       // Concert hall reverb
+        Plate,      // Plate reverb simulation
+        Spring,     // Spring reverb simulation
+        Shimmer,    // Shimmer reverb with pitch shifting
         NumTypes
     };
 
     //==============================================================================
-    IKDistortionAudioProcessor();
-    ~IKDistortionAudioProcessor() override;
+    IKReverbAudioProcessor();
+    ~IKReverbAudioProcessor() override;
 
-    // Add the declaration here
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     //==============================================================================
@@ -66,29 +65,26 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
-    juce::AudioProcessorValueTreeState& getParameters() { return apvts; }
+    juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
 
     // Made public for visualization
-    float processDistortion(float input, DistortionType type);
-    float processDestroy(float input, float amount);
+    float processShimmer(float input, float amount);
 
     juce::AudioProcessorValueTreeState apvts;
-    juce::dsp::StateVariableTPTFilter<float> bandpassFilter;
-    bool ghostModeEnabled = false;
+    juce::dsp::Reverb reverb;
+    juce::dsp::DelayLine<float> preDelay { 192000 }; // 2 seconds at 96kHz
+    bool shimmerEnabled = false;
 
 private:
     //==============================================================================
-    // Tone filter state
-    float lastSampleL = 0.0f;
-    float lastSampleR = 0.0f;
+    // Reverb parameters
+    juce::dsp::Reverb::Parameters reverbParams;
     
-    // Destroy filter state
-    float destroyFilterL[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-    float destroyFilterR[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    // Shimmer effect state
+    float shimmerMix = 0.0f;
+    float shimmerPhase = 0.0f;
+    
     double currentSampleRate = 44100.0;
     
-    float ghostBandpassFreq = 1000.0f;
-    float ghostBandpassQ = 0.707f;
-    
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IKDistortionAudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IKReverbAudioProcessor)
 };

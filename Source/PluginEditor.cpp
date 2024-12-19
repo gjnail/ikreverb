@@ -9,299 +9,191 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-//==============================================================================
-IKDistortionAudioProcessorEditor::IKDistortionAudioProcessorEditor (IKDistortionAudioProcessor& p)
-    : AudioProcessorEditor (&p), audioProcessor (p), visualizer()
+IKReverbAudioProcessorEditor::IKReverbAudioProcessorEditor (IKReverbAudioProcessor& p)
+    : AudioProcessorEditor (&p), audioProcessor (p)
 {
-    setSize (400, 700);  // Made taller to accommodate visualizer
-    
     // Set custom look and feel
     setLookAndFeel(&customLookAndFeel);
-    
-    // Add visualizer
-    addAndMakeVisible(visualizer);
-    visualizer.setProcessor(&audioProcessor);
-    
-    // Ghost Mode Button
-    ghostModeButton.setButtonText("GHOST MODE");
-    ghostModeButton.setClickingTogglesState(true);
-    ghostModeButton.setColour(juce::TextButton::buttonColourId, juce::Colours::black);
-    ghostModeButton.setColour(juce::TextButton::buttonOnColourId, juce::Colours::darkred);
-    ghostModeButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
-    ghostModeButton.setColour(juce::TextButton::textColourOnId, juce::Colours::red);
-    addAndMakeVisible(ghostModeButton);
-    
-    // Common slider setup
-    auto setupSlider = [this](juce::Slider& slider, bool isSmall = false) {
+
+    // Title and subtitle
+    titleLabel.setText("INTERNET KIDS", juce::dontSendNotification);
+    titleLabel.setFont(juce::Font(24.0f, juce::Font::bold));
+    titleLabel.setJustificationType(juce::Justification::centred);
+    titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    addAndMakeVisible(titleLabel);
+
+    subtitleLabel.setText("REVERB", juce::dontSendNotification);
+    subtitleLabel.setFont(juce::Font(18.0f, juce::Font::bold));
+    subtitleLabel.setJustificationType(juce::Justification::centred);
+    subtitleLabel.setColour(juce::Label::textColourId, juce::Colour(0, 255, 255));  // Cyan
+    addAndMakeVisible(subtitleLabel);
+
+    // Setup sliders
+    auto setupSlider = [this](juce::Slider& slider, const juce::String& labelText, juce::Label& label)
+    {
         slider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, isSmall ? 60 : 90, 25);
-        slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::cyan);
+        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+        slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
         slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
         addAndMakeVisible(slider);
-    };
-    
-    // Common label setup
-    auto setupLabel = [this](juce::Label& label, const juce::String& text) {
-        label.setText(text, juce::dontSendNotification);
-        label.setFont(juce::Font(juce::Font::FontStyleFlags::bold).withHeight(16.0f));
+
+        label.setText(labelText, juce::dontSendNotification);
+        label.setFont(juce::Font(14.0f));
         label.setJustificationType(juce::Justification::centred);
-        label.setColour(juce::Label::textColourId, juce::Colours::yellow);
+        label.setColour(juce::Label::textColourId, juce::Colours::white);
+        label.attachToComponent(&slider, false);
         addAndMakeVisible(label);
     };
-    
-    // Setup all sliders
-    setupSlider(driveSlider);
-    setupSlider(outputSlider);
-    setupSlider(toneSlider);
-    setupSlider(mixSlider);
-    
-    // Setup destroy slider with custom look
-    destroySlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    destroySlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 90, 25);
-    destroySlider.setLookAndFeel(&destroyLookAndFeel);
-    addAndMakeVisible(destroySlider);
-    
-    // Setup all labels
-    setupLabel(driveLabel, "DRIVE");
-    setupLabel(outputLabel, "OUTPUT");
-    setupLabel(toneLabel, "TONE");
-    setupLabel(mixLabel, "MIX");
-    setupLabel(typeLabel, "TYPE");
-    
-    // Setup destroy label
-    destroyLabel.setText("DESTROY", juce::dontSendNotification);
-    destroyLabel.setFont(juce::Font(juce::Font::FontStyleFlags::bold).withHeight(16.0f));
-    destroyLabel.setJustificationType(juce::Justification::centred);
-    destroyLabel.setColour(juce::Label::textColourId, juce::Colours::red);
-    addAndMakeVisible(destroyLabel);
-    
-    // Type selection setup
-    typeBox.setColour(juce::ComboBox::textColourId, juce::Colours::cyan);
-    typeBox.addItemList({"SOFT", "HARD", "TUBE", "FOLDBACK", "SINE"}, 1);
+
+    setupSlider(sizeSlider, "SIZE", sizeLabel);
+    setupSlider(mixSlider, "MIX", mixLabel);
+    setupSlider(predelaySlider, "PREDELAY", predelayLabel);
+    setupSlider(lowCutSlider, "LOW CUT", lowCutLabel);
+    setupSlider(highCutSlider, "HIGH CUT", highCutLabel);
+
+    // Setup type selection box
+    typeBox.addItem("HALL", 1);
+    typeBox.addItem("ROOM", 2);
+    typeBox.addItem("PLATE", 3);
+    typeBox.addItem("SPACE", 4);
     typeBox.setJustificationType(juce::Justification::centred);
+    typeBox.setColour(juce::ComboBox::textColourId, juce::Colours::white);
     addAndMakeVisible(typeBox);
-    
-    // Create parameter attachments
-    driveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.apvts, "drive", driveSlider);
-    outputAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.apvts, "output", outputSlider);
-    toneAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.apvts, "tone", toneSlider);
+
+    typeLabel.setText("TYPE", juce::dontSendNotification);
+    typeLabel.setFont(juce::Font(14.0f));
+    typeLabel.setJustificationType(juce::Justification::centred);
+    typeLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    typeLabel.attachToComponent(&typeBox, false);
+    addAndMakeVisible(typeLabel);
+
+    // Setup parameter attachments
+    auto& apvts = audioProcessor.getAPVTS();
+    sizeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        apvts, "size", sizeSlider);
     mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.apvts, "mix", mixSlider);
-    destroyAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.apvts, "destroy", destroySlider);
+        apvts, "mix", mixSlider);
+    predelayAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        apvts, "predelay", predelaySlider);
+    lowCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        apvts, "lowcut", lowCutSlider);
+    highCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        apvts, "highcut", highCutSlider);
     typeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-        audioProcessor.apvts, "type", typeBox);
-    ghostModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        audioProcessor.apvts, "ghostMode", ghostModeButton);
-        
-    startTimerHz(30); // For UI updates
+        apvts, "type", typeBox);
+
+    // Setup visualizer
+    visualizer.setProcessor(&audioProcessor);
+    addAndMakeVisible(visualizer);
+
+    // Window size
+    setSize (600, 500);
+    startTimerHz(30);
 }
 
-IKDistortionAudioProcessorEditor::~IKDistortionAudioProcessorEditor()
+IKReverbAudioProcessorEditor::~IKReverbAudioProcessorEditor()
 {
     setLookAndFeel(nullptr);
-    destroySlider.setLookAndFeel(nullptr);
+    stopTimer();
 }
 
-void IKDistortionAudioProcessorEditor::paint (juce::Graphics& g)
+void IKReverbAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    // Get the current ghost mode state directly from the button
-    bool isGhostMode = ghostModeButton.getToggleState();
-    
-    if (isGhostMode)
-        drawGhostModeBackground(g);
-    else
-        drawNormalBackground(g);
-
-    // Draw a border around the ghost mode button that glows when active
-    if (isGhostMode)
-    {
-        auto buttonBounds = ghostModeButton.getBounds().toFloat();
-        g.setColour(juce::Colours::red.withAlpha(0.5f));
-        g.drawRoundedRectangle(buttonBounds.expanded(2.0f), 4.0f, 2.0f);
-        g.setColour(juce::Colours::red.withAlpha(0.2f));
-        g.drawRoundedRectangle(buttonBounds.expanded(4.0f), 4.0f, 2.0f);
-    }
+    drawBackground(g);
 }
 
-void IKDistortionAudioProcessorEditor::drawGhostModeBackground(juce::Graphics& g)
+void IKReverbAudioProcessorEditor::drawCheckerboard(juce::Graphics& g, juce::Rectangle<int> area)
 {
-    // Base background (dark red/black gradient)
-    g.setGradientFill(juce::ColourGradient(
-        juce::Colour(40, 0, 0), 0.0f, 0.0f,
-        juce::Colour(10, 0, 0), 0.0f, (float)getHeight(),
-        false));
-    g.fillAll();
-    
-    // Add some eerie red elements
-    g.setColour(juce::Colours::red.withAlpha(0.1f));
-    for (int i = 0; i < getWidth(); i += 20)
-    {
-        g.drawLine(i, 0, i + 20, getHeight(), 1.0f);
-    }
-    
-    // Add some static/noise effect
-    g.setColour(juce::Colours::white.withAlpha(0.05f));
-    juce::Random random;
-    for (int i = 0; i < 1000; i++)
-    {
-        float x = random.nextFloat() * getWidth();
-        float y = random.nextFloat() * getHeight();
-        g.fillRect(juce::Rectangle<float>(x, y, 1.0f, 1.0f));
-    }
-    
-    // Title with ghost style
-    auto titleArea = getLocalBounds().removeFromTop(100);
-    
-    // Title shadow
-    g.setColour(juce::Colours::red.withAlpha(0.5f));
-    g.setFont(juce::Font(32.0f, juce::Font::bold));
-    g.drawFittedText("INTERNET KIDS", titleArea.translated(2, 2).removeFromTop(50),
-                     juce::Justification::centred, 1);
-                     
-    // Main title
-    g.setColour(juce::Colours::white);
-    g.setFont(juce::Font(32.0f, juce::Font::bold));
-    g.drawFittedText("INTERNET KIDS", titleArea.removeFromTop(50),
-                     juce::Justification::centred, 1);
-    
-    // Subtitle
-    g.setColour(juce::Colours::red);
-    g.setFont(juce::Font(24.0f, juce::Font::bold));
-    g.drawFittedText("GHOST MODE", titleArea,
-                     juce::Justification::centred, 1);
+    const int squareSize = 10;
+    const float alpha = 0.03f;
 
-    // Add some flickering elements
-    if (random.nextFloat() > 0.7f)
-    {
-        g.setColour(juce::Colours::red.withAlpha(0.1f));
-        g.fillRect(random.nextInt(getWidth()), random.nextInt(getHeight()), 
-                  random.nextInt(50), random.nextInt(50));
-    }
-}
-
-void IKDistortionAudioProcessorEditor::drawNormalBackground(juce::Graphics& g)
-{
-    // Base background (dark purple/blue gradient)
-    g.setGradientFill(juce::ColourGradient(
-        juce::Colour(40, 0, 60), 0.0f, 0.0f,
-        juce::Colour(20, 0, 40), 0.0f, (float)getHeight(),
-        false));
-    g.fillAll();
-    
-    // Draw checkerboard pattern
-    drawCheckerboard(g, getLocalBounds());
-    
-    // Add some 90s style grid lines
-    g.setColour(juce::Colours::cyan.withAlpha(0.1f));
-    for (int i = 0; i < getWidth(); i += 20) {
-        g.drawVerticalLine(i, 0.0f, (float)getHeight());
-    }
-    for (int i = 0; i < getHeight(); i += 20) {
-        g.drawHorizontalLine(i, 0.0f, (float)getWidth());
-    }
-    
-    // Title with 90s style
-    auto titleArea = getLocalBounds().removeFromTop(100);
-    
-    // Title shadow
-    g.setColour(juce::Colours::magenta.withAlpha(0.5f));
-    g.setFont(juce::Font(32.0f, juce::Font::bold));
-    g.drawFittedText("INTERNET KIDS", titleArea.translated(2, 2).removeFromTop(50),
-                     juce::Justification::centred, 1);
-                     
-    // Main title
-    g.setColour(juce::Colours::cyan);
-    g.setFont(juce::Font(32.0f, juce::Font::bold));
-    g.drawFittedText("INTERNET KIDS", titleArea.removeFromTop(50),
-                     juce::Justification::centred, 1);
-    
-    // Subtitle
-    g.setColour(juce::Colours::magenta);
-    g.setFont(juce::Font(24.0f, juce::Font::bold));
-    g.drawFittedText("DISTORTION", titleArea,
-                     juce::Justification::centred, 1);
-}
-
-void IKDistortionAudioProcessorEditor::drawCheckerboard(juce::Graphics& g, juce::Rectangle<int> area)
-{
-    int squareSize = 20;
-    bool isWhite = false;
-    
     for (int y = area.getY(); y < area.getBottom(); y += squareSize)
     {
-        isWhite = !isWhite;  // Alternate starting color for each row
         for (int x = area.getX(); x < area.getRight(); x += squareSize)
         {
-            g.setColour(isWhite ? juce::Colours::white.withAlpha(0.03f) 
-                               : juce::Colours::black.withAlpha(0.2f));
-            g.fillRect(x, y, squareSize, squareSize);
-            isWhite = !isWhite;
+            if ((x / squareSize + y / squareSize) % 2 == 0)
+            {
+                g.setColour(juce::Colours::white.withAlpha(alpha));
+                g.fillRect(x, y, squareSize, squareSize);
+            }
         }
     }
 }
 
-void IKDistortionAudioProcessorEditor::resized()
+void IKReverbAudioProcessorEditor::drawBackground(juce::Graphics& g)
 {
-    auto area = getLocalBounds();
-    area.removeFromTop(100); // Space for title
-    
-    // Ghost mode button at the top
-    ghostModeButton.setBounds(area.removeFromTop(30).reduced(5));
-    
-    // Visualizer below ghost mode button
-    auto visArea = area.removeFromTop(120).reduced(20, 10);
-    visualizer.setBounds(visArea);
-    
-    // Type selection below visualizer
-    auto typeArea = area.removeFromTop(60).reduced(20, 0);
-    typeLabel.setBounds(typeArea.removeFromTop(20));
-    typeBox.setBounds(typeArea);
-    
-    // Rest of the layout stays the same...
-    auto sliderArea = area.reduced(30);
-    auto sliderWidth = sliderArea.getWidth() / 2;
-    auto sliderHeight = sliderArea.getHeight() / 3;
-    
-    // Top row
-    auto topRow = sliderArea.removeFromTop(sliderHeight);
-    
-    // Drive
-    auto driveArea = topRow.removeFromLeft(sliderWidth);
-    driveLabel.setBounds(driveArea.removeFromTop(20));
-    driveSlider.setBounds(driveArea.reduced(10));
-    
-    // Output
-    outputLabel.setBounds(topRow.removeFromTop(20));
-    outputSlider.setBounds(topRow.reduced(10));
-    
-    // Middle row
-    auto middleRow = sliderArea.removeFromTop(sliderHeight);
-    
-    // Tone
-    auto toneArea = middleRow.removeFromLeft(sliderWidth);
-    toneLabel.setBounds(toneArea.removeFromTop(20));
-    toneSlider.setBounds(toneArea.reduced(10));
-    
-    // Mix
-    mixLabel.setBounds(middleRow.removeFromTop(20));
-    mixSlider.setBounds(middleRow.reduced(10));
-    
-    // Bottom row (Destroy only)
-    auto bottomRow = sliderArea;
-    
-    // Center the destroy section
-    auto destroySection = bottomRow.reduced(sliderWidth * 0.25f, 0);  // Center by reducing sides
-    
-    // Destroy (large, centered)
-    destroyLabel.setBounds(destroySection.removeFromTop(20));
-    destroySlider.setBounds(destroySection.reduced(5));
+    auto bounds = getLocalBounds();
+
+    // Main background gradient
+    g.setGradientFill(juce::ColourGradient(
+        juce::Colour(40, 40, 40),
+        0.0f, 0.0f,
+        juce::Colour(20, 20, 20),
+        0.0f, (float)bounds.getHeight(),
+        false));
+    g.fillAll();
+
+    // Draw checkerboard pattern
+    drawCheckerboard(g, bounds);
+
+    // Draw grid lines
+    g.setColour(juce::Colours::white.withAlpha(0.1f));
+    for (int x = 0; x < bounds.getWidth(); x += 20)
+    {
+        g.drawVerticalLine(x, 0.0f, (float)bounds.getHeight());
+    }
+    for (int y = 0; y < bounds.getHeight(); y += 20)
+    {
+        g.drawHorizontalLine(y, 0.0f, (float)bounds.getWidth());
+    }
+
+    // Draw border glow
+    auto borderBounds = bounds.toFloat().reduced(2);
+    g.setGradientFill(juce::ColourGradient(
+        juce::Colour(0, 255, 255).withAlpha(0.5f),  // Cyan
+        borderBounds.getTopLeft(),
+        juce::Colour(255, 0, 255).withAlpha(0.5f),  // Magenta
+        borderBounds.getBottomRight(),
+        true));
+    g.drawRoundedRectangle(borderBounds, 5.0f, 2.0f);
 }
 
-void IKDistortionAudioProcessorEditor::timerCallback()
+void IKReverbAudioProcessorEditor::resized()
 {
-    repaint(); // Update the UI regularly for ghost mode effects
+    auto bounds = getLocalBounds().reduced(20);
+    auto topSection = bounds.removeFromTop(80);
+
+    // Title and subtitle
+    titleLabel.setBounds(topSection.removeFromTop(30));
+    subtitleLabel.setBounds(topSection.removeFromTop(30));
+
+    // Visualizer
+    visualizer.setBounds(bounds.removeFromTop(100));
+
+    // Type selection box - smaller and at the top
+    auto typeBoxBounds = bounds.removeFromTop(40);
+    typeBox.setBounds(typeBoxBounds.reduced(typeBoxBounds.getWidth() / 3, 5));
+
+    // Controls section - now in two rows
+    auto controlsArea = bounds.reduced(10, 10);
+    
+    // Top row (Size, Mix, Predelay)
+    auto topRow = controlsArea.removeFromTop(controlsArea.getHeight() / 2);
+    auto sliderWidth = topRow.getWidth() / 3;
+    
+    sizeSlider.setBounds(topRow.removeFromLeft(sliderWidth).reduced(5));
+    mixSlider.setBounds(topRow.removeFromLeft(sliderWidth).reduced(5));
+    predelaySlider.setBounds(topRow.removeFromLeft(sliderWidth).reduced(5));
+
+    // Bottom row (Low Cut, High Cut)
+    auto bottomRow = controlsArea;
+    sliderWidth = bottomRow.getWidth() / 2;
+    
+    lowCutSlider.setBounds(bottomRow.removeFromLeft(sliderWidth).reduced(5));
+    highCutSlider.setBounds(bottomRow.removeFromLeft(sliderWidth).reduced(5));
+}
+
+void IKReverbAudioProcessorEditor::timerCallback()
+{
+    repaint();
 }
