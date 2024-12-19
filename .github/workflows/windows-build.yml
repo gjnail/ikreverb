@@ -90,23 +90,23 @@ jobs:
         }
         
         Write-Host "`nVerifying .jucer file..."
-        if (Test-Path "IKDistortion.jucer") {
+        if (Test-Path "IKReverb.jucer") {
             Write-Host "Project file found:"
             Write-Host "Content preview:"
-            Get-Content "IKDistortion.jucer" -Head 10
+            Get-Content "IKReverb.jucer" -Head 10
         } else {
             Write-Error "Project file not found"
             exit 1
         }
         
         Write-Host "`nGenerating Visual Studio project..."
-        Write-Host "Running Projucer with command: .\Projucer.exe --resave IKDistortion.jucer"
+        Write-Host "Running Projucer with command: .\Projucer.exe --resave IKReverb.jucer"
         
         # Create a batch file to run Projucer
         @"
         @echo off
         echo Running Projucer...
-        ".\Projucer.exe" --resave "IKDistortion.jucer"
+        ".\Projucer.exe" --resave "IKReverb.jucer"
         echo Exit code: %ERRORLEVEL%
         exit /b %ERRORLEVEL%
         "@ | Out-File -FilePath "run_projucer.bat" -Encoding ASCII
@@ -130,7 +130,7 @@ jobs:
         }
         
         Write-Host "`nVerifying generated project..."
-        if (Test-Path "Builds/VisualStudio2022/IKDistortion.sln") {
+        if (Test-Path "Builds/VisualStudio2022/IKReverb.sln") {
             Write-Host "Solution file generated successfully"
             Get-ChildItem "Builds/VisualStudio2022" -Recurse | ForEach-Object {
                 Write-Host "  $($_.FullName)"
@@ -144,7 +144,7 @@ jobs:
       shell: pwsh
       run: |
         Write-Host "Building VST3 plugin..."
-        msbuild "Builds/VisualStudio2022/IKDistortion.sln" /p:Configuration=Release /p:Platform=x64
+        msbuild "Builds/VisualStudio2022/IKReverb.sln" /p:Configuration=Release /p:Platform=x64
         if ($LASTEXITCODE -ne 0) {
           Write-Error "Build failed with exit code: $LASTEXITCODE"
           exit 1
@@ -164,16 +164,16 @@ jobs:
       shell: pwsh
       run: |
         Write-Host "Setting up installer directory structure..."
-        $vst3Dir = "Builds/VisualStudio2022/x64/Release/VST3/IKDistortion.vst3/Contents/x86_64-win"
+        $vst3Dir = "Builds/VisualStudio2022/x64/Release/VST3/IKReverb.vst3/Contents/x86_64-win"
         
         Write-Host "Cleaning up existing files..."
-        if (Test-Path "$vst3Dir/IKDistortion.vst3") {
-          Remove-Item "$vst3Dir/IKDistortion.vst3" -Force
+        if (Test-Path "$vst3Dir/IKReverb.vst3") {
+          Remove-Item "$vst3Dir/IKReverb.vst3" -Force
         }
         
         Write-Host "Copying VST3 plugin..."
-        Copy-Item "Builds/VisualStudio2022/x64/Release/VST3/IKDistortion.dll" -Destination "$vst3Dir/IKDistortion.vst3" -Force
-        if (-not (Test-Path "$vst3Dir/IKDistortion.vst3")) {
+        Copy-Item "Builds/VisualStudio2022/x64/Release/VST3/IKReverb.dll" -Destination "$vst3Dir/IKReverb.vst3" -Force
+        if (-not (Test-Path "$vst3Dir/IKReverb.vst3")) {
           Write-Error "Failed to copy VST3 plugin"
           exit 1
         }
@@ -202,6 +202,6 @@ jobs:
     - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:
-        name: IKDistortion-Windows
-        path: scripts/IKDistortion-1.0.0-Windows.exe
+        name: IKReverb-Windows
+        path: scripts/IKReverb-1.0.0-Windows.exe
         if-no-files-found: error
