@@ -1,0 +1,207 @@
+name: Build Windows VST3
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+        lfs: true
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1.1
+
+    - name: Download JUCE
+      run: |
+        git clone --depth 1 --branch 7.0.7 https://github.com/juce-framework/JUCE.git
+        
+    - name: Download and Setup Projucer
+      shell: pwsh
+      run: |
+        Write-Host "Downloading Projucer..."
+        curl -L https://github.com/juce-framework/JUCE/releases/download/7.0.7/juce-7.0.7-windows.zip -o juce.zip
+        
+        Write-Host "Extracting Projucer..."
+        mkdir -p projucer_temp
+        7z x juce.zip -oprojucer_temp
+        
+        Write-Host "Locating Projucer.exe..."
+        $projucer = Get-ChildItem -Path projucer_temp -Recurse -Filter Projucer.exe | Select-Object -First 1
+        if ($projucer) {
+            Write-Host "Found Projucer at: $($projucer.FullName)"
+            Copy-Item $projucer.FullName -Destination .
+            Write-Host "Copied Projucer to current directory"
+        } else {
+            Write-Error "Projucer.exe not found in extracted files"
+            exit 1
+        }
+        
+        Write-Host "Verifying Projucer.exe..."
+        if (Test-Path "Projucer.exe") {
+            $projucerInfo = Get-Item Projucer.exe
+            Write-Host "Projucer.exe details:"
+            Write-Host "  Size: $($projucerInfo.Length) bytes"
+            Write-Host "  Created: $($projucerInfo.CreationTime)"
+            Write-Host "  Last Modified: $($projucerInfo.LastWriteTime)"
+        } else {
+            Write-Error "Projucer.exe not found after copy"
+            exit 1
+        }
+        
+    - name: Generate Visual Studio Project
+      shell: pwsh
+      run: |
+        Write-Host "Current directory: $(Get-Location)"
+        Write-Host "Directory contents:"
+        Get-ChildItem -Recurse | ForEach-Object {
+            Write-Host "  $($_.FullName) - Size: $($_.Length) bytes"
+        }
+        
+        Write-Host "`nVerifying Projucer..."
+        if (Test-Path "Projucer.exe") {
+            $projucer = Get-Item Projucer.exe
+            Write-Host "Projucer.exe found:"
+            Write-Host "  Path: $($projucer.FullName)"
+            Write-Host "  Size: $($projucer.Length) bytes"
+            Write-Host "  Created: $($projucer.CreationTime)"
+        } else {
+            Write-Error "Projucer.exe not found"
+            exit 1
+        }
+        
+        Write-Host "`nVerifying JUCE modules..."
+        if (Test-Path "JUCE/modules") {
+            Write-Host "JUCE modules found at: $(Get-Item 'JUCE/modules' | Select-Object FullName)"
+            Get-ChildItem "JUCE/modules" | ForEach-Object {
+                Write-Host "  $($_.Name)"
+            }
+        } else {
+            Write-Error "JUCE modules not found"
+            exit 1
+        }
+        
+        Write-Host "`nVerifying .jucer file..."
+        if (Test-Path "IKDistortion.jucer") {
+            Write-Host "Project file found:"
+            Write-Host "Content preview:"
+            Get-Content "IKDistortion.jucer" -Head 10
+        } else {
+            Write-Error "Project file not found"
+            exit 1
+        }
+        
+        Write-Host "`nGenerating Visual Studio project..."
+        Write-Host "Running Projucer with command: .\Projucer.exe --resave IKDistortion.jucer"
+        
+        # Create a batch file to run Projucer
+        @"
+        @echo off
+        echo Running Projucer...
+        ".\Projucer.exe" --resave "IKDistortion.jucer"
+        echo Exit code: %ERRORLEVEL%
+        exit /b %ERRORLEVEL%
+        "@ | Out-File -FilePath "run_projucer.bat" -Encoding ASCII
+        
+        # Run the batch file
+        $process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "run_projucer.bat" -NoNewWindow -PassThru -Wait -RedirectStandardOutput "projucer_output.txt" -RedirectStandardError "projucer_error.txt"
+        $exit_code = $process.ExitCode
+        
+        Write-Host "Projucer output:"
+        if (Test-Path "projucer_output.txt") {
+            Get-Content "projucer_output.txt"
+        }
+        Write-Host "Projucer errors:"
+        if (Test-Path "projucer_error.txt") {
+            Get-Content "projucer_error.txt"
+        }
+        
+        if ($exit_code -ne 0) {
+            Write-Error "Projucer failed with exit code: $exit_code"
+            exit 1
+        }
+        
+        Write-Host "`nVerifying generated project..."
+        if (Test-Path "Builds/VisualStudio2022/IKDistortion.sln") {
+            Write-Host "Solution file generated successfully"
+            Get-ChildItem "Builds/VisualStudio2022" -Recurse | ForEach-Object {
+                Write-Host "  $($_.FullName)"
+            }
+        } else {
+            Write-Error "Solution file not found"
+            exit 1
+        }
+
+    - name: Build VST3
+      shell: pwsh
+      run: |
+        Write-Host "Building VST3 plugin..."
+        msbuild "Builds/VisualStudio2022/IKDistortion.sln" /p:Configuration=Release /p:Platform=x64
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Build failed with exit code: $LASTEXITCODE"
+          exit 1
+        }
+
+    - name: Install NSIS
+      shell: pwsh
+      run: |
+        Write-Host "Installing NSIS..."
+        choco install nsis -y
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Failed to install NSIS with exit code: $LASTEXITCODE"
+          exit 1
+        }
+
+    - name: Create Installer
+      shell: pwsh
+      run: |
+        Write-Host "Setting up installer directory structure..."
+        $vst3Dir = "Builds/VisualStudio2022/x64/Release/VST3/IKDistortion.vst3/Contents/x86_64-win"
+        
+        Write-Host "Cleaning up existing files..."
+        if (Test-Path "$vst3Dir/IKDistortion.vst3") {
+          Remove-Item "$vst3Dir/IKDistortion.vst3" -Force
+        }
+        
+        Write-Host "Copying VST3 plugin..."
+        Copy-Item "Builds/VisualStudio2022/x64/Release/VST3/IKDistortion.dll" -Destination "$vst3Dir/IKDistortion.vst3" -Force
+        if (-not (Test-Path "$vst3Dir/IKDistortion.vst3")) {
+          Write-Error "Failed to copy VST3 plugin"
+          exit 1
+        }
+        
+        Write-Host "Running NSIS Installer Script..."
+        Push-Location scripts
+        & "C:\Program Files (x86)\NSIS\makensis.exe" /V4 windows_installer.nsi
+        $nsisExitCode = $LASTEXITCODE
+        Pop-Location
+        
+        if ($nsisExitCode -ne 0) {
+          Write-Error "Failed to create installer with exit code: $nsisExitCode"
+          exit 1
+        }
+        
+        Write-Host "`nListing files in current and scripts directory:"
+        Write-Host "Current directory:"
+        Get-ChildItem -Recurse | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
+            Write-Host "  $($_.FullName) - Size: $($_.Length) bytes"
+        }
+        Write-Host "`nScripts directory:"
+        Get-ChildItem scripts -Recurse | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
+            Write-Host "  $($_.FullName) - Size: $($_.Length) bytes"
+        }
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: IKDistortion-Windows
+        path: scripts/IKDistortion-1.0.0-Windows.exe
+        if-no-files-found: error
