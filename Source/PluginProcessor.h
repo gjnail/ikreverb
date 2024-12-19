@@ -80,6 +80,10 @@ private:
     // Reverb parameters
     juce::dsp::Reverb::Parameters reverbParams;
     
+    // Filters
+    juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> lowCutFilter;
+    juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> highCutFilter;
+    
     // Shimmer effect state
     float shimmerMix = 0.0f;
     float shimmerPhase = 0.0f;

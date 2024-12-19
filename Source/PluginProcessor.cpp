@@ -50,6 +50,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout IKReverbAudioProcessor::crea
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
         0.0f));
 
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        "lowcut",
+        "Low Cut",
+        juce::NormalisableRange<float>(20.0f, 1000.0f, 1.0f, 0.3f),
+        20.0f));
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        "highcut",
+        "High Cut",
+        juce::NormalisableRange<float>(1000.0f, 20000.0f, 1.0f, 0.3f),
+        20000.0f));
+
     return layout;
 }
 
@@ -146,7 +158,17 @@ void IKReverbAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     
     reverb.prepare(spec);
     preDelay.prepare(spec);
-    preDelay.setDelay(0);
+    
+    // Initialize filters
+    lowCutFilter.prepare(spec);
+    highCutFilter.prepare(spec);
+    
+    // Initialize filter coefficients
+    auto lowCutFreq = apvts.getRawParameterValue("lowcut")->load();
+    auto highCutFreq = apvts.getRawParameterValue("highcut")->load();
+    
+    *lowCutFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(sampleRate, lowCutFreq);
+    *highCutFilter.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, highCutFreq);
     
     // Initialize reverb parameters
     reverbParams.roomSize = 0.5f;
@@ -204,6 +226,20 @@ void IKReverbAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     auto* typeParam = apvts.getRawParameterValue("type");
     auto* predelayParam = apvts.getRawParameterValue("predelay");
     auto* modulationParam = apvts.getRawParameterValue("modulation");
+    auto* lowCutParam = apvts.getRawParameterValue("lowcut");
+    auto* highCutParam = apvts.getRawParameterValue("highcut");
+
+    // Update filter coefficients
+    *lowCutFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(currentSampleRate, lowCutParam->load());
+    *highCutFilter.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass(currentSampleRate, highCutParam->load());
+
+    // Create audio block for filter processing
+    juce::dsp::AudioBlock<float> filterBlock(buffer);
+    juce::dsp::ProcessContextReplacing<float> filterContext(filterBlock);
+    
+    // Apply filters
+    lowCutFilter.process(filterContext);
+    highCutFilter.process(filterContext);
 
     // Update reverb parameters based on type
     float baseSize = sizeParam->load();
@@ -276,9 +312,9 @@ void IKReverbAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     }
 
     // Process reverb
-    juce::dsp::AudioBlock<float> block(wetBuffer);
-    juce::dsp::ProcessContextReplacing<float> context(block);
-    reverb.process(context);
+    juce::dsp::AudioBlock<float> reverbBlock(wetBuffer);
+    juce::dsp::ProcessContextReplacing<float> reverbContext(reverbBlock);
+    reverb.process(reverbContext);
 
     // Apply modulation
     if (modulation > 0.0f)
